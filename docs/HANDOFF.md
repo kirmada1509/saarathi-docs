@@ -10,44 +10,58 @@ Written for the person who now owns this codebase and has to defend it to judges
 flowchart TB
     Browser["Browser"]
 
-    subgraph FE["saarathi-frontend — Next.js 16 App Router · :3000"]
-        TQ["TanStack Query<br/>cache keyed on URL params<br/>(lib/queries.ts)"]
+    subgraph FE["saarathi-frontend (Next.js 16 App Router · :3000)"]
+        TQ["TanStack Query<br/>• Client cache (lib/queries.ts)<br/>• Fetches from backend via HTTP/JSON"]
+        MAP["MapLibre GL + MapTiler<br/>• Browser-side tiles<br/>• Fetched from api.maptiler.com"]
     end
+
+    subgraph BE["saarathi-backend (NestJS · :4000)"]
+        RC["RecommendController<br/>• POST /api/recommend"]
+        UC["UsersController<br/>• GET /api/users<br/>• Direct DB query (bypasses store)"]
+        
+        %% Core modules
+        DATA["core/data.ts<br/>• Cache manager / singleton"]
+        PREF["core/preferences.ts<br/>• Inference engine"]
+        RANK["core/ranking.ts<br/>• Scorer & filter funnel"]
+        CF["core/counterfactuals.ts<br/>• Perturbation algebra"]
+        CONF["core/confidence.ts<br/>• Match % & tier metrics"]
+        EXP["core/explain.ts<br/>• Explanation orchestration"]
+        
+        STORE["In-memory store<br/>• Direct cache of users & flights<br/>• Populated once at boot"]
+        DB[("prisma/dev.db (SQLite)<br/>• 50 users, 50k flights<br/>• Read once at boot via Prisma")]
+        EMB["@xenova/transformers<br/>• Local all-MiniLM-L6-v2<br/>• In-process embeddings"]
+    end
+
+    GROQ["Groq API<br/>• llama-3.3-70b-versatile<br/>• External LLM provider"]
+
+    %% Connections
     Browser --> TQ
-
-    subgraph BE["saarathi-backend — NestJS · :4000"]
-        RC["RecommendController<br/>POST /api/recommend"]
-        UC["UsersController<br/>GET /api/users"]
-        subgraph CORE["core/ — pure TS, zero framework imports"]
-            direction LR
-            DATA["data.ts"] --> PREF["preferences.ts"] --> RANK["ranking.ts"] --> CF["counterfactuals.ts"] --> CONF["confidence.ts"] --> EXP["explain.ts"]
-        end
-        RC --> CORE
-    end
-
-    TQ -- "fetch, CORS *" --> RC
-    RC -- "JSON RecommendResponse" --> TQ
-    UC -. "direct query, bypasses the store — see §5" .-> DB
-
-    MAP["MapLibre GL + MapTiler<br/>browser-side — tiles fetched directly<br/>from api.maptiler.com"]
     Browser --> MAP
 
-    EMB["@xenova/transformers<br/>all-MiniLM-L6-v2<br/>in-process, no network call"]
-    PREF -. "in-process call" .-> EMB
+    TQ <--> RC
+    TQ --> UC
+    UC -.-> DB
 
-    GROQ["Groq API — llama-3.3-70b-versatile<br/>via @langchain/groq<br/>never-throw fallback"]
-    EXP -. "network hop" .-> GROQ
+    RC --> DATA
+    DATA --> PREF
+    PREF --> RANK
+    RANK --> CF
+    CF --> CONF
+    CONF --> EXP
 
-    STORE["In-memory store<br/>data.ts singleton<br/>Map of user_id to UserRow<br/>Map of origin to FlightRow list<br/>Map of 'origin-dest' to FlightRow list<br/>built ONCE at boot"]
     DATA --> STORE
+    DB --> STORE
+    PREF -. "Local call" .-> EMB
+    EXP -. "Network hop" .-> GROQ
 
-    DB[("saarathi-backend/prisma/dev.db · SQLite<br/>50 users, 50,000 flights<br/>— verified live")]
-    DB -- "Prisma Client, read once at boot" --> STORE
-
-    style CF fill:#F2A93B,color:#000
-    style GROQ fill:#F2A93B,color:#000
-    style EMB fill:#3DDC97,color:#000
-    style DB fill:#3DDC97,color:#000
+    %% Style defaults for light/dark theme visibility
+    linkStyle default stroke:#888,stroke-width:2px;
+    
+    %% Specific node styles with high contrast
+    style CF fill:#F2A93B,stroke:#d78520,stroke-width:2px,color:#000
+    style GROQ fill:#F2A93B,stroke:#d78520,stroke-width:2px,color:#000
+    style EMB fill:#3DDC97,stroke:#2bb87a,stroke-width:2px,color:#000
+    style DB fill:#3DDC97,stroke:#2bb87a,stroke-width:2px,color:#000
 ```
 
 **What runs where, over what.** Two separate OS processes. `saarathi-frontend` is a Next.js dev/prod server on port 3000, entirely React Server/Client Components — it never touches a database or the LLM directly. `saarathi-backend` is a NestJS server on port 4000, plain HTTP/JSON, no WebSockets, no gRPC. The frontend talks to the backend the same way any external client would: `fetch()` over HTTP to `http://localhost:4000`, with the backend allowing it via a wildcard CORS policy (`saarathi-backend/src/main.ts:8-12`). There is no proxy, no Next.js rewrite, no server-side-only API key shared between them — see §2 for the exact wiring. Inside the backend, every `/api/recommend` request runs entirely synchronously against an **in-memory** copy of the dataset (`getStore()` in `data.ts`); the actual SQLite file is only read once, at process boot, via Prisma. The embedding model (`@xenova/transformers`) runs **inside the Node process itself** — no network call, no separate service — while the LLM call (Groq) is the *only* network hop that leaves the machine. Everything else is deterministic arithmetic over data already sitting in memory.
