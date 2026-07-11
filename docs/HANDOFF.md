@@ -6,45 +6,48 @@ Written for the person who now owns this codebase and has to defend it to judges
 
 ## 1. The 60-second system map
 
-```
-┌─────────────────────────┐         HTTP (fetch, CORS *)        ┌──────────────────────────────────┐
-│  Browser                │ ───────────────────────────────────▶│  saarathi-backend (NestJS)        │
-│  localhost:3000         │   GET  /api/users                    │  localhost:4000                   │
-│                          │   POST /api/recommend                │                                    │
-│  saarathi-frontend       │◀─────────────────────────────────── │  RecommendController               │
-│  (Next.js 16 App Router) │        JSON RecommendResponse        │  UsersController                   │
-└───────────┬──────────────┘                                     └───────────────┬────────────────────┘
-            │                                                                     │
-            │ TanStack Query cache keyed on URL params                           │ calls, per request:
-            │ (lib/queries.ts)                                                   ▼
-            │                                                     ┌──────────────────────────────────┐
-            │                                                     │  core/ (pure TS, no framework)     │
-            │                                                     │  data.ts → preferences.ts →        │
-            │                                                     │  ranking.ts → counterfactuals.ts → │
-            │                                                     │  confidence.ts → explain.ts        │
-            │                                                     └───────┬──────────────┬─────────────┘
-            │                                                             │              │
-            ▼                                                             ▼              ▼
-┌──────────────────────────┐                          ┌─────────────────────────┐  ┌──────────────────────────┐
-│  MapLibre GL + MapTiler   │                          │  @xenova/transformers    │  │  Groq API (llama-3.3-70b) │
-│  (browser-side, tiles     │                          │  all-MiniLM-L6-v2        │  │  via @langchain/groq      │
-│  fetched directly from    │                          │  runs IN-PROCESS in the  │  │  network call, has a      │
-│  api.maptiler.com)        │                          │  Node backend, no network│  │  never-throw fallback     │
-└──────────────────────────┘                          └─────────────────────────┘  └──────────────────────────┘
+```mermaid
+flowchart TB
+    Browser["Browser"]
 
-                                       ┌──────────────────────────────────────────┐
-                                       │  In-memory store (data.ts singleton)       │
-                                       │  Map<user_id, UserRow>                     │
-                                       │  Map<origin, FlightRow[]>                  │
-                                       │  Map<"origin-dest", FlightRow[]>           │
-                                       │  built ONCE at boot from ↓                 │
-                                       └───────────────────┬────────────────────────┘
-                                                            │ Prisma Client
-                                                            ▼
-                                       ┌──────────────────────────────────────────┐
-                                       │  saarathi-backend/prisma/dev.db (SQLite)   │
-                                       │  50 users, 50,000 flights (verified live)  │
-                                       └──────────────────────────────────────────┘
+    subgraph FE["saarathi-frontend — Next.js 16 App Router · :3000"]
+        TQ["TanStack Query<br/>cache keyed on URL params<br/>(lib/queries.ts)"]
+    end
+    Browser --> TQ
+
+    subgraph BE["saarathi-backend — NestJS · :4000"]
+        RC["RecommendController<br/>POST /api/recommend"]
+        UC["UsersController<br/>GET /api/users"]
+        subgraph CORE["core/ — pure TS, zero framework imports"]
+            direction LR
+            DATA["data.ts"] --> PREF["preferences.ts"] --> RANK["ranking.ts"] --> CF["counterfactuals.ts"] --> CONF["confidence.ts"] --> EXP["explain.ts"]
+        end
+        RC --> CORE
+    end
+
+    TQ -- "fetch, CORS *" --> RC
+    RC -- "JSON RecommendResponse" --> TQ
+    UC -. "direct query, bypasses the store — see §5" .-> DB
+
+    MAP["MapLibre GL + MapTiler<br/>browser-side — tiles fetched directly<br/>from api.maptiler.com"]
+    Browser --> MAP
+
+    EMB["@xenova/transformers<br/>all-MiniLM-L6-v2<br/>in-process, no network call"]
+    PREF -. "in-process call" .-> EMB
+
+    GROQ["Groq API — llama-3.3-70b-versatile<br/>via @langchain/groq<br/>never-throw fallback"]
+    EXP -. "network hop" .-> GROQ
+
+    STORE["In-memory store<br/>data.ts singleton<br/>Map of user_id to UserRow<br/>Map of origin to FlightRow list<br/>Map of 'origin-dest' to FlightRow list<br/>built ONCE at boot"]
+    DATA --> STORE
+
+    DB[("saarathi-backend/prisma/dev.db · SQLite<br/>50 users, 50,000 flights<br/>— verified live")]
+    DB -- "Prisma Client, read once at boot" --> STORE
+
+    style CF fill:#F2A93B,color:#000
+    style GROQ fill:#F2A93B,color:#000
+    style EMB fill:#3DDC97,color:#000
+    style DB fill:#3DDC97,color:#000
 ```
 
 **What runs where, over what.** Two separate OS processes. `saarathi-frontend` is a Next.js dev/prod server on port 3000, entirely React Server/Client Components — it never touches a database or the LLM directly. `saarathi-backend` is a NestJS server on port 4000, plain HTTP/JSON, no WebSockets, no gRPC. The frontend talks to the backend the same way any external client would: `fetch()` over HTTP to `http://localhost:4000`, with the backend allowing it via a wildcard CORS policy (`saarathi-backend/src/main.ts:8-12`). There is no proxy, no Next.js rewrite, no server-side-only API key shared between them — see §2 for the exact wiring. Inside the backend, every `/api/recommend` request runs entirely synchronously against an **in-memory** copy of the dataset (`getStore()` in `data.ts`); the actual SQLite file is only read once, at process boot, via Prisma. The embedding model (`@xenova/transformers`) runs **inside the Node process itself** — no network call, no separate service — while the LLM call (Groq) is the *only* network hop that leaves the machine. Everything else is deterministic arithmetic over data already sitting in memory.
