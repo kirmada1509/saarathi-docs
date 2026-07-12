@@ -49,18 +49,17 @@
   •  origin  /  destination : String (Optional)                                                                                                                                              
   •  cities : Array of Strings (Optional, triggers multi-city mode)                                                                                                                          
   •  perturbations : Array of active counterfactual chips (Optional)                                                                                                                         
-  ──────                                                                                                                                                                                     
-  ### Step 2: Preference Inference ( inferPreferences )                                                                                                                                      
-                                                                                                                                                                                             
-  • Function called:  inferPreferences(user)  inside preferences.ts.                                                                                                                         
+  ──────                                                                                                                  ### Step 2: Preference Inference ( inferPreferences )                                                                                                                                      
+                                                                                                                                                                                              
+  • Function called:  inferPreferences(user, requestText)  inside preferences.ts.                                                                                                            
   • Behavior:                                                                                                                                                                                
       1. Retrieves base preference coefficients from structured fields (e.g. mapping  direct_preference :  strong -> 0.9 ,  moderate -> 0.55 ,  none -> 0.15 ).                              
-      2. Splits  user.raw_history  on  |  into distinct phrases.                                                                                                                             
-      3. Checks regex patterns (e.g.,  DIRECT_BOOST ,  COST_BOOST ,  REDEYE_AVOID ) against each phrase.                                                                                     
+      2. Splits  user.raw_history  on  |  into distinct phrases, and parses  requestText  into distinct sentences/clauses as additional input phrases.                                       
+      3. Checks regex patterns (e.g.,  DIRECT_BOOST ,  COST_BOOST ,  REDEYE_AVOID ) against each phrase. Phrases matching from  requestText  are labeled with source  trip_description .         
       4. Embedding Fallback: If a phrase matches no regex, it loads  @xenova/transformers  ( all-MiniLM-L6-v2 ) in-process and runs  findEmbeddingMatch(phrase)  comparing its 384-          
       dimensional dot product similarity against pre-defined archetype phrases (threshold >0.78).                                                                                            
       5. Accumulates  directHits ,  costHits , and  convHits  to adjust direct/cost/convenience weights upwards by  +0.1  or  +0.15  per hit (capped at  1.0 ).                              
-      6. Returns  InferredPreference  object containing weights and a descriptive  evidence  trail.                                                                                          
+      6. Returns  InferredPreference  object containing weights and a descriptive  evidence  trail.                                                                                                                                                                    
                                                                                                                                                                                              
   ──────                                                                                                                                                                                     
   ### Step 3: Perturbation Application ( applyPerturbations )                                                                                                                                
@@ -77,7 +76,7 @@
                                                                                                                                                                                              
   #### Mode A: Single-Leg Route                                                                                                                                                              
                                                                                                                                                                                              
-  1. Destination Parsing: Infers destination from  requestText  if not supplied explicitly (scans for 3-letter uppercase airport codes or matches city names).                               
+  1. Destination Parsing: Infers destination or cities list from  requestText  if not supplied explicitly (scans for 3-letter uppercase airport codes or matches city names to classify the route as single-leg or multi-city).                               
   2. Filtering & Scoring: Calls  filterAndRank(routeFlights, perturbedPref, opts)  inside ranking.ts.                                                                                        
       • Hard Constraints Funnel: Filters candidate flights sequentially:                                                                                                                     
           1. Origin match                                                                                                                                                                    
