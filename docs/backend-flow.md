@@ -114,11 +114,11 @@
                                                                                                                                                                                              
   #### Mode B: Multi-City Route                                                                                                                                                              
                                                                                                                                                                                              
-  1. Permutations generation: Calls  optimizeRoute(cities, perturbedPref)  in multicity.ts.                                                                                                  
+  1. Permutations generation: Calls  optimizeRoute(cities, perturbedPref, stayDurations)  in multicity.ts.                                                                                   
       • Computes all possible city ordering permutations (e.g., A → B → C → A vs A → C → B → A).                                                                                             
   2. Optimal Pathing (Branch-and-Bound):                                                                                                                                                     
       • For each permutation, runs a branch-and-bound search.                                                                                                                                
-      • Checks  satisfiesTemporalSanity(leg1, leg2)  to ensure at least 60 minutes between connections.                                                                                      
+      • Checks  satisfiesStayDuration(leg1, leg2, stayCity, stayDurations)  to ensure at least `stayDurations[city] * 24` hours are spent at each destination, falling back to 60 minutes if unspecified.
       • Prunes search branches if the maximum possible remaining score cannot exceed the best path found so far.                                                                             
   3. Synthetic Margin Formulation:                                                                                                                                                           
       • Creates a synthetic ranked array representing the score gap between the winner permutation and runner-up permutation. This is injected into the single-leg confidence calculator to  
