@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saarathi Decision Engine: Architecture & Workflow Specification</title>
+  
+  <!-- Premium Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid JS for Dynamic Vector Diagrams -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        background: '#FFFFFF',
+        primaryColor: '#F1F5F9',
+        primaryTextColor: '#0F172A',
+        primaryBorderColor: '#E2E8F0',
+        lineColor: '#475569',
+        secondaryColor: '#E2E8F0',
+        tertiaryColor: '#F8FAFC',
+        actorBorder: '#E2E8F0',
+        actorBkg: '#F1F5F9',
+        actorTextColor: '#0F172A',
+        signalColor: '#D97706',
+        signalTextColor: '#475569',
+        labelBoxBkgColor: '#F1F5F9',
+        labelBoxBorderColor: '#E2E8F0',
+        labelTextColor: '#0F172A',
+        loopKeyBkgColor: '#E2E8F0'
+      }
+    });
+  </script>
+
+  <style>
+    /* Premium Modern Light Theme */
+    :root {
+      --bg-base: #F8FAFC;
+      --bg-surface: #FFFFFF;
+      --bg-surface-raised: #F1F5F9;
+      --text-primary: #0F172A;
+      --text-secondary: #475569;
+      --text-on-accent: #FFFFFF;
+      --border-default: #E2E8F0;
+      --accent: #D97706;
+      --accent-hover: #B45309;
+      --signal-positive: #16A34A;
+      --signal-negative: #DC2626;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-secondary);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 50px;
+      border-bottom: 1px solid var(--border-default);
+      padding-bottom: 30px;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 38px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 18px;
+      color: var(--accent);
+      font-weight: 400;
+      margin-bottom: 15px;
+    }
+
+    .metadata {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Table of Contents */
+    .toc {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 40px;
+    }
+
+    .toc h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      color: var(--text-primary);
+      margin-bottom: 15px;
+      border-bottom: 1px solid var(--border-default);
+      padding-bottom: 8px;
+    }
+
+    .toc ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+
+    .toc li {
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .toc a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .toc a:hover {
+      color: var(--accent);
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 50px;
+    }
+
+    .section-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+    }
+
+    h2.section-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 22px;
+      background-color: var(--accent);
+      border-radius: 2px;
+    }
+
+    p {
+      margin-bottom: 15px;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      background-color: var(--bg-surface-raised);
+      padding: 3px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    pre.mermaid {
+      background-color: var(--bg-surface-raised) !important;
+      border: 1px solid var(--border-default);
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+
+    /* Core Algorithms Styles */
+    ul.list-details {
+      list-style-type: none;
+      padding-left: 0;
+    }
+
+    ul.list-details > li {
+      margin-bottom: 20px;
+      padding-left: 20px;
+      position: relative;
+    }
+
+    ul.list-details > li::before {
+      content: '✦';
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: var(--accent);
+    }
+
+    h3.algo-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 5px;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .formula-box {
+      background-color: var(--bg-surface-raised);
+      border-left: 3px solid var(--accent);
+      border-right: 1px solid var(--border-default);
+      border-top: 1px solid var(--border-default);
+      border-bottom: 1px solid var(--border-default);
+      border-radius: 0 6px 6px 0;
+      padding: 15px;
+      margin: 10px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-primary);
+      overflow-x: auto;
+    }
+
+    .sub-list {
+      list-style-type: circle;
+      padding-left: 20px;
+      margin-top: 5px;
+      font-size: 13px;
+    }
+
+    /* PDF Print Styles (Optimized for clean page-breaks & layout) */
+    @media print {
+      body {
+        background-color: #FFFFFF;
+        color: #1A1A1A;
+        font-size: 12px;
+        padding: 0;
+      }
+
+      .section-card {
+        page-break-inside: avoid;
+        border: 1px solid #CBD5E1;
+        background-color: #F8FAFC;
+        margin-bottom: 20px;
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 26px;
+        color: #0F172A;
+      }
+
+      .subtitle {
+        font-size: 14px;
+      }
+
+      .formula-box {
+        border-left: 3px solid #D97706;
+        background-color: #F1F5F9;
+        color: #0F172A;
+      }
+
+      .toc {
+        display: none; /* Hide TOC on print */
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <header>
+      <h1>Saarathi Decision Engine</h1>
+      <div class="subtitle">System Architecture &amp; Workflow Specification</div>
+      <div class="metadata">Document Version: 1.0.0 | Date: July 2026 | Expedia Group</div>
+    </header>
+
+    <!-- Table of Contents -->
+    <div class="toc">
+      <h2>Table of Contents</h2>
+      <ul>
+        <li><a href="#architecture">1. System Module Architecture</a></li>
+        <li><a href="#single-leg-flow">2. Request Sequence Lifecycle: Single-Leg Route</a></li>
+        <li><a href="#multi-city-flow">3. Request Sequence Lifecycle: Multi-City Route</a></li>
+        <li><a href="#lifecycle">4. Boot Lifecycle &amp; Memory Caching</a></li>
+        <li><a href="#ai-boundary">5. AI/LLM Boundaries &amp; Resilient Fallbacks</a></li>
+        <li><a href="#database">6. SQLite &amp; Prisma Database Schema Design</a></li>
+        <li><a href="#algorithms">7. Core Deterministic Routing Algorithms</a></li>
+      </ul>
+    </div>
+
+    <!-- Section 1 -->
+    <section id="architecture">
+      <div class="section-card">
+        <h2 class="section-title">1. System Module Architecture</h2>
+        <p>
+          The application follows a modular NestJS dependency injection architecture integrated with a framework-free, highly testable core business library. The backend modules are broken down as follows:
+        </p>
+        <ul style="margin-left: 20px; margin-bottom: 20px; font-size: 14px;">
+          <li><strong>AppModule:</strong> The root entry point coordinating bootstrapping and cache warming.</li>
+          <li><strong>RecommendModule:</strong> Manages user requests, orchestrates leg evaluation, and parses natural language travel intentions.</li>
+          <li><strong>UsersModule:</strong> Handles traveler profile data, DB access, and active traveler queries.</li>
+          <li><strong>CortexModule:</strong> Encapsulates LLM queries and cosine-similarity check logic.</li>
+          <li><strong>Saarathi Core Library (Framework-free):</strong> Houses raw mathematical scoring models, date calculators, layover constraints, and backtracking route sequences.</li>
+        </ul>
+        
+        <pre class="mermaid">
+graph TD
+  subgraph NestJS Backend Application [NestJS App Boundary]
+    direction TB
+    
+    subgraph AppModule [App Module]
+      AppMod[AppModule]
+    end
+
+    subgraph RecommendModule [Recommend Module]
+      RecommendCtrl[RecommendController]
+      RecommendSvc[RecommendService]
+      RecommendSingleLegSvc[RecommendSingleLegService]
+      RecommendMultiCitySvc[RecommendMultiCityService]
+      RouteParserSvc[RouteParserService]
+    end
+
+    subgraph UsersModule [Users Module]
+      UsersCtrl[UsersController]
+      PrismaSvc[PrismaService]
+    end
+
+    subgraph CortexModule [Cortex AI Module]
+      CortexSvc[CortexService]
+    end
+
+    subgraph SaarathiModule [Saarathi Core Library Module]
+      Data[saarathi/data.ts]
+      Prefs[saarathi/preferences.ts]
+      Rank[saarathi/ranking.ts]
+      CF[saarathi/counterfactuals.ts]
+      Conf[saarathi/confidence.ts]
+      MC[saarathi/multicity.ts]
+      Types[saarathi/types.ts]
+    end
+  end
+
+  AppMod --> RecommendCtrl
+  AppMod --> UsersCtrl
+  RecommendCtrl --> RecommendSvc
+  RecommendSvc --> RecommendSingleLegSvc
+  RecommendSvc --> RecommendMultiCitySvc
+  RecommendSvc --> RouteParserSvc
+  UsersCtrl --> PrismaSvc
+
+  %% Cortex Interactions
+  RecommendSingleLegSvc --> CortexSvc
+  RecommendMultiCitySvc --> CortexSvc
+  RouteParserSvc --> CortexSvc
+
+  %% Saarathi Core dependencies
+  RecommendSvc --> Prefs
+  RecommendSvc --> CF
+  RecommendSvc --> Data
+
+  RecommendSingleLegSvc --> Rank
+  RecommendSingleLegSvc --> CF
+  RecommendSingleLegSvc --> Conf
+  RecommendSingleLegSvc --> Data
+
+  RecommendMultiCitySvc --> MC
+  RecommendMultiCitySvc --> Conf
+
+  RouteParserSvc --> Data
+  AppMod --> Data
+
+  classDef nestjs fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0369a1;
+  classDef coreLib fill:#f5f3ff,stroke:#d97706,stroke-width:1.5px,color:#92400e;
+
+  class AppMod,RecommendCtrl,RecommendSvc,RecommendSingleLegSvc,RecommendMultiCitySvc,RouteParserSvc,UsersCtrl,PrismaSvc,CortexSvc nestjs;
+  class Data,Prefs,Rank,CF,Conf,MC,Types coreLib;
+        </pre>
+      </div>
+    </section>
+
+    <!-- Section 2 -->
+    <section id="single-leg-flow">
+      <div class="section-card">
+        <h2 class="section-title">2. Request Sequence Lifecycle: Single-Leg Route</h2>
+        <p>
+          This sequence diagram documents the end-to-end lifecycle of a single-leg flight recommendation search. The controller intercepts the payload, triggers asynchronous preference weights modeling (with an offline fallback to cosine similarity checks), resolves missing destinations, filters the active flight pool, performs counterfactual inversion to find decision thresholds, and packages the technical explainability trace.
+        </p>
+
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor Client
+  participant C as RecommendController
+  participant RS as RecommendService
+  participant RP as RouteParserService
+  participant RSL as RecommendSingleLegService
+  participant IP as preferences.ts
+  participant AP as counterfactuals.ts
+  participant R as ranking.ts
+  participant CF as counterfactuals.ts
+  participant CO as confidence.ts
+  participant CTX as CortexService
+
+  Client->>C: POST /api/recommend (payload)
+  C->>RS: getRecommendation(data)
+  RS->>CTX: inferPreferences(user, requestText)
+  alt LLM Inference succeeds
+    CTX-->>RS: basePref
+  else LLM fails / offline
+    RS->>IP: inferPreferences(user, requestText)
+    IP-->>RS: basePref
+  end
+  RS->>AP: applyPerturbations(basePref, perturbations)
+  AP-->>RS: perturbedPref
+  Note over RS,RP: If route missing, infer destination
+  RS->>RP: inferRouteFromText(text, home, store)
+  RP-->>RS: resolvedDestination
+  RS->>RSL: getRecommendation(..., basePref, perturbedPref, ...)
+  RSL->>RSL: runSingleLegRoutingWithFallback(...)
+  RSL->>R: filterAndRank(routeFlights, perturbedPref, ...)
+  R-->>RSL: rankedFlights
+  Note over RSL,R: If empty match, triggers constraint relaxation
+  RSL->>R: selectAlternatives(ranked, user)
+  R-->>RSL: alternatives
+  RSL->>CF: computeCounterfactuals(ranked, basePref, ...)
+  CF-->>RSL: counterfactuals
+  RSL->>CO: computeConfidence(ranked, perturbedPref)
+  CO-->>RSL: confidence
+  RSL->>CTX: generateExplanation(..., confidence)
+  CTX-->>RSL: explanation string
+  RSL-->>RS: RecommendResponse
+  RS-->>C: RecommendResponse
+  C-->>Client: 200 OK (payload + trace)
+        </pre>
+      </div>
+    </section>
+
+    <!-- Section 3 -->
+    <section id="multi-city-flow">
+      <div class="section-card">
+        <h2 class="section-title">3. Request Sequence Lifecycle: Multi-City Route</h2>
+        <p>
+          The multi-city lifecycle utilizes a specialized route optimizer module. Permutations of destinations are analyzed, stay requirements are checked against departure dates, and the best sequence is computed using recursive backtracking pruned by precalculated remaining max potential scores.
+        </p>
+
+        <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor Client
+  participant C as RecommendController
+  participant RS as RecommendService
+  participant RP as RouteParserService
+  participant RMC as RecommendMultiCityService
+  participant IP as preferences.ts
+  participant AP as counterfactuals.ts
+  participant MC as multicity.ts
+  participant CO as confidence.ts
+  participant CTX as CortexService
+
+  Client->>C: POST /api/recommend (payload)
+  C->>RS: getRecommendation(data)
+  RS->>CTX: inferPreferences(user, requestText)
+  alt LLM Inference succeeds
+    CTX-->>RS: basePref
+  else LLM fails / offline
+    RS->>IP: inferPreferences(user, requestText)
+    IP-->>RS: basePref
+  end
+  RS->>AP: applyPerturbations(basePref, perturbations)
+  AP-->>RS: perturbedPref
+  Note over RS,RP: If cities or stay durations missing
+  RS->>RP: inferRouteFromText(text, home, store)
+  RP-->>RS: resolvedCities
+  RS->>RP: parseStayDurationsFromText(text, store)
+  RP-->>RS: resolvedStayDurations
+  RS->>RMC: getRecommendation(..., resolvedCities, perturbedPref, ...)
+  RMC->>MC: optimizeRoute(cities, perturbedPref, stayDurations)
+  MC-->>RMC: { itinerary, alternatives, counterfactualLabel, scoreGap }
+  Note over RMC: Constructs synthetic margin
+  RMC->>CO: computeConfidence(syntheticRanked, perturbedPref)
+  CO-->>RMC: confidence
+  RMC->>CTX: generateExplanation(..., confidence)
+  CTX-->>RMC: explanation string
+  RMC-->>RS: RecommendResponse
+  RS-->>C: RecommendResponse
+  C-->>Client: 200 OK (payload + trace)
+        </pre>
+      </div>
+    </section>
+
+    <!-- Section 4 -->
+    <section id="lifecycle">
+      <div class="section-card">
+        <h2 class="section-title">4. Boot Lifecycle &amp; Memory Caching</h2>
+        <p>
+          To maintain sub-millisecond route calculations, the backend avoids making database queries during the evaluation of flight recommendation requests. On application boot, the database is parsed and cached into memory once.
+        </p>
+
+        <pre class="mermaid">
+graph TD
+  subgraph Startup [Once on application boot]
+    Init[NestJS Bootstrap] --> AppModuleInit[AppModule.onModuleInit]
+    AppModuleInit --> InitStore[initializeStoreFromDb]
+    InitStore --> PrismaUsers[prisma.user.findMany]
+    InitStore --> PrismaFlights[prisma.flight.findMany]
+    PrismaUsers --> CoerceUsers[coerceUserRow]
+    PrismaFlights --> CoerceFlights[coerceFlightRow]
+    CoerceUsers --> BuildCache[Build DataStore Maps: users, flightsByRoute, flightsByOrigin, airports]
+    CoerceFlights --> BuildCache
+    BuildCache --> SetSingleton[Store Map Singleton: globalThis.__saarathi_store__]
+  end
+
+  subgraph Request [Per-Request Flow]
+    Req[POST /api/recommend] --> GetStore[getStore]
+    GetStore --> ReadCache[Read directly from globalThis.__saarathi_store__]
+    ReadCache --> CompleteRequest[Run pricing/filter scoring logic in 0ms]
+  end
+
+  classDef nestjs fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#0369a1;
+  classDef coreLib fill:#f5f3ff,stroke:#d97706,stroke-width:1.5px,color:#92400e;
+  classDef database fill:#fff5f5,stroke:#dc2626,stroke-width:1.5px,color:#991b1b;
+  classDef client fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#047857;
+
+  class Init,AppModuleInit,InitStore nestjs;
+  class PrismaUsers,PrismaFlights database;
+  class CoerceUsers,CoerceFlights,BuildCache,SetSingleton,GetStore,ReadCache,CompleteRequest coreLib;
+  class Req client;
+        </pre>
+      </div>
+    </section>
+
+    <!-- Section 5 -->
+    <section id="ai-boundary">
+      <div class="section-card">
+        <h2 class="section-title">5. AI/LLM Boundaries &amp; Resilient Fallbacks</h2>
+        <p>
+          AI integration is designed with resilience in mind. If the external LLM provider encounters API rate limits or connection failures, local deterministic fallbacks step in, preserving full functionality:
+        </p>
+
+        <pre class="mermaid">
+graph TD
+  subgraph AI Input/Output Schema
+    Request[Request Rationale, Parse Route & Infer Preferences] -->|user_id, requestText| CortexService[CortexService]
+    CortexService -->|API Call| Groq[Groq API: llama-3.3-70b-versatile]
+  end
+
+  subgraph generateExplanation Fallback Path
+    GroqFails1[Groq API offline / Missing API key] -->|Catch Error| ExplanationFallback[explanationFallback]
+    ExplanationFallback -->|Constructs deterministic text| FallbackText[best flight details + last 2 preferences evidence]
+  end
+
+  subgraph parseRoute Fallback Path
+    GroqFails2[Groq API offline / Missing API key] -->|Returns null| RouteParserFallback[RouteParserService]
+    RouteParserFallback -->|inferRouteFromText| RegexAirport[Regex match airport codes & city names]
+    RouteParserFallback -->|parseStayDurationsFromText| RegexNights[Regex match stay durations e.g., '3 nights in LHR']
+  end
+
+  subgraph inferPreferences Fallback Path
+    GroqFails3[Groq API offline / Missing API key] -->|Returns null| PrefFallback[preferences.ts]
+    PrefFallback -->|Structured Mapping| BaseWeights[Map price & direct selections to base weights]
+    PrefFallback -->|Regex Scanning| RegexWeights[Boost weights using keyword matches]
+    PrefFallback -->|Local Embeddings| EmbedWeights[MiniLM cosine similarity threshold checks]
+  end
+
+  classDef nestjs fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#0369a1;
+  classDef coreLib fill:#f5f3ff,stroke:#d97706,stroke-width:1.5px,color:#92400e;
+  classDef ai fill:#f3e8ff,stroke:#7c3aed,stroke-width:1.5px,color:#5b21b6;
+  classDef client fill:#ecfdf5,stroke:#059669,stroke-width:1.5px,color:#047857;
+
+  class CortexService,RouteParserFallback nestjs;
+  class Groq ai;
+  class ExplanationFallback,FallbackText,RegexAirport,RegexNights,GroqFails1,GroqFails2,PrefFallback,BaseWeights,RegexWeights,EmbedWeights,GroqFails3 coreLib;
+  class Request client;
+        </pre>
+      </div>
+    </section>
+
+    <!-- Section 6 -->
+    <section id="database">
+      <div class="section-card">
+        <h2 class="section-title">6. SQLite &amp; Prisma Database Schema Design</h2>
+        <p>
+          The application persists structural data inside a SQLite file. Below is the active layout and query access frequency chart:
+        </p>
+
+        <pre class="mermaid">
+graph TD
+  SQLite[(SQLite DB: dev.db)]
+  Prisma[Prisma Client]
+
+  SQLite <--> Prisma
+
+  subgraph DB Hits [Direct SQLite Queries]
+    AppBoot[App Boot: OnModuleInit] -->|Warms cache| Prisma
+    GetUsers[GET /api/users] -->|Direct Query| Prisma
+  end
+
+  subgraph Cached [Zero DB Reads]
+    GetRecommend[POST /api/recommend] -->|Reads from globalThis.__saarathi_store__| InMemoryStore[In-Memory Cache]
+    GetParse[POST /api/recommend/parse-route] -->|Reads from globalThis.__saarathi_store__| InMemoryStore
+  end
+
+  classDef nestjs fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px,color:#0369a1;
+  classDef coreLib fill:#f5f3ff,stroke:#d97706,stroke-width:1.5px,color:#92400e;
+  classDef database fill:#fff5f5,stroke:#dc2626,stroke-width:1.5px,color:#991b1b;
+
+  class AppBoot nestjs;
+  class SQLite,Prisma,GetUsers database;
+  class GetRecommend,GetParse,InMemoryStore coreLib;
+        </pre>
+      </div>
+    </section>
+
+    <!-- Section 7 -->
+    <section id="algorithms">
+      <div class="section-card">
+        <h2 class="section-title">7. Core Deterministic Routing Algorithms</h2>
+        
+        <ul class="list-details">
+          <li>
+            <h3 class="algo-title">A. Preference Weight Inference</h3>
+            <p>
+              Calculates numeric weights ($w_i \in [0, 1]$) representing a traveler's priorities: price sensitivity, direct flight preference, cabin tier, and airline loyalty. The weights are constructed by checking dropdown variables, searching free text using regex keywords, and checking semantic similarity with the local <code>all-MiniLM-L6-v2</code> embedding pipeline (cosine threshold &ge; 0.35).
+            </p>
+          </li>
+          
+          <li>
+            <h3 class="algo-title">B. Flight Filtering &amp; Linear Scoring</h3>
+            <p>
+              Candidate flights are evaluated using a deterministic linear equation. First, hard constraints are applied (e.g. max layover limit, dates flexible window, red-eye filtering). Then, surviving flights are scored using the normalized weights and properties:
+            </p>
+            <div class="formula-box">
+Score = (costWeight * PriceScore + directWeight * DirectScore + (1 - costWeight) * 0.5 * DurationScore + convenienceWeight * 0.3 * CabinScore + 0.2 * AirlineScore + baggageWeight * BaggageScore) * DemandAdjustment * HolidayAdjustment + DayBonus
+            </div>
+            <p class="sub-list" style="margin-left: 20px;">
+              Where <code>PriceScore</code> and <code>DurationScore</code> are dynamically scaled to $[0, 1]$ relative to the minimum and maximum values present in the current flight pool.
+            </p>
+          </li>
+
+          <li>
+            <h3 class="algo-title">C. Multi-City Routing Optimizer</h3>
+            <p>
+              For multi-city requests, the optimizer generates all permutations of the destination city order. For each permutation, a recursive backtracking search is performed to match flights chronological to dates. The search is optimized via a branch-and-bound pruning step:
+            </p>
+            <div class="formula-box">
+if (currentAccumulatedScore + maxPotentialRemainingScore &le; bestScoreFound) {
+    pruneBranch(); // Skip scanning deep legs
+}
+            </div>
+          </li>
+
+          <li>
+            <h3 class="algo-title">D. Counterfactual Inversion</h3>
+            <p>
+              To locate decision boundaries for runners-up, the linear scoring function is algebraically inverted to find the exact price threshold that would make it equal the champion's score:
+            </p>
+            <div class="formula-box">
+priceDrop = (Score_champion - Score_challenger) * PriceRange / (costWeight * demandMultiplier * holidayMultiplier)
+            </div>
+            <p style="margin-top: 10px;">
+              If the required drop is &le; 60% of the flight's original price, it is returned as a realistic counterfactual threshold to present to the traveler.
+            </p>
+          </li>
+
+          <li>
+            <h3 class="algo-title">E. Confidence Assessment</h3>
+            <p>
+              Assigns a confidence tier (High, Medium, Low) to a recommendation. It computes the match percentage (ratio of champion score to theoretical maximum score). It outputs <code>High</code> confidence only if the score margin between the champion and the runner-up is &gt; 0.1, and reduces the confidence tier to <code>Low</code> if the margin is &lt; 0.04 or if conflicting preferences (e.g. high price sensitivity but strong premium cabin preference) are detected.
+            </p>
+          </li>
+        </ul>
+
+      </div>
+    </section>
+
+  </div>
+
+</body>
+</html>
